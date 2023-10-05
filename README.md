@@ -17,12 +17,18 @@ Feito isso, é importante observar nos logs a seguintes mensagens:
 2023/10/05 15:56:15 DB initialized
 ```
 
-## Passo 1: Executando o cliente
+## Passo 2: Executando o cliente
 Entrar na pasta /client e executar o comando
 
 ```
 go run main.go
 ```
-Feito isso, o arquivo é criado no diretório.
+Feito isso, o arquivo `cotacao.txt` é criado no diretório.
 
+## Extras
+É possível configurar um banco de dados utilizar o arquivo docker-compose. Para isso, execute o comando:
+
+```
+docker-compose up 
+```
 
