@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -45,17 +46,17 @@ func main() {
 
 func getQuoteHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, time.Millisecond*200)
-	defer cancel()
 	quoteRequest, error := getQuoteOnCurrencyAPI(ctx)
 	if error != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	ctxDB := context.Background()
-	ctxDB, cancelDB := context.WithTimeout(ctxDB, time.Millisecond*10)
-	defer cancelDB()
 	insertQuoteRequest(ctxDB, quoteRequest)
+	if error != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	resp := QuoteResponse{Bid: quoteRequest.Bid}
@@ -74,16 +75,23 @@ func initDB() {
 }
 
 func insertQuoteRequest(ctx context.Context, quoteRequest *QuoteRequest) {
-	currencyAPIContext, _ := context.WithTimeout(ctx, time.Millisecond*20)
-	DB.WithContext(currencyAPIContext)
-	DB.Create(quoteRequest)
+	ctx, cancelDB := context.WithTimeout(ctx, time.Millisecond*10)
+	defer cancelDB()
+	DB.WithContext(ctx).Create(quoteRequest)
+
+	select {
+	case <-ctx.Done():
+		fmt.Println("Failed to insert quote on DB. Timeout reached")
+	case <-time.After(time.Millisecond * 10):
+		fmt.Println("Quote inserted successfully")
+	}
 }
 
 func getQuoteOnCurrencyAPI(ctx context.Context) (*QuoteRequest, error) {
 	log.Println("Calling prices API...")
-	currencyAPIContext, cancel := context.WithTimeout(ctx, time.Millisecond*1000)
+	ctx, cancel := context.WithTimeout(ctx, time.Millisecond*1000)
 	defer cancel()
-	request, error := http.NewRequestWithContext(currencyAPIContext, "GET", "https://economia.awesomeapi.com.br/json/last/USD-BRL", nil)
+	request, error := http.NewRequestWithContext(ctx, "GET", "https://economia.awesomeapi.com.br/json/last/USD-BRL", nil)
 	if error != nil {
 		return nil, error
 	}
@@ -93,6 +101,13 @@ func getQuoteOnCurrencyAPI(ctx context.Context) (*QuoteRequest, error) {
 	}
 	defer response.Body.Close()
 	body, error := io.ReadAll(response.Body)
+	select {
+	case <-ctx.Done():
+		fmt.Println("Failed to get quote on API. Timeout reached")
+
+	case <-time.After(time.Millisecond * 300):
+		fmt.Println("Request quote on API successful")
+	}
 	if error != nil {
 		return nil, error
 	}
